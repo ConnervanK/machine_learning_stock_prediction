@@ -3,6 +3,7 @@ channels:
   - conda-forge      # community-driven packages, latest versions
 dependencies:
   - python=3.12      # latest stable Python version
+  - ipykernel        # Jupyter kernel for this environment
   - numpy            # numerical computations
   - pandas           # data manipulation
   - matplotlib       # plotting library
