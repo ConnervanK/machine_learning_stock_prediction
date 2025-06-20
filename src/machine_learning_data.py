@@ -10,7 +10,7 @@ def test():
 
 def generate_financial_data():
 
-    from create_tensor import extend_monthly_data, create_tensor_from_csvs
+    from src.create_tensor import extend_monthly_data, create_tensor_from_csvs
     import download_csv as dcsv
     import os   
     import numpy as np
