@@ -14,6 +14,7 @@ dependencies:
   - scipy            # scientific computing
   - python-dateutil  # date parsing utilities
   - pip              # to install packages unavailable in conda
+  - yfinance         # for fetching financial data
 
   #- pip:
       # Add pip-only packages here, if any from your script dependencies are not in conda-forge
