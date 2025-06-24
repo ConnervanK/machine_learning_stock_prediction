@@ -49,3 +49,8 @@ POLYBOX
 The AI that returns a sentiment score takes a long time to run.
 To save time, we can upload data from processed articles here:
 https://polybox.ethz.ch/index.php/s/R99PSQwT9e9CjYy
+
+If you want to download the data from this polybox use:
+https://polybox.ethz.ch/index.php/s/R99PSQwT9e9CjYy/download
+
+The files are downloaded as a zip file, so they need to be extracted. polybox_download.py does this for you and loads all data csv's into the data directory

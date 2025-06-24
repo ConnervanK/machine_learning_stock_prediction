@@ -16,9 +16,11 @@ dependencies:
   - pip              # to install packages unavailable in conda
   - yfinance         # for fetching financial data
   - newspaper3k      # for web scraping news articles
-  - finhub-python    # for financial data and news API
-  - lxml_html_clean  # for cleaning HTML content from web scraping
+  - finnhub-python    # for financial data and news API
   - pandas-datareader # for reading financial data from various sources
+  - transformers      # for NLP tasks, especially with financial text
+  - requests          # for making HTTP requests
 
-  #- pip:
+  - pip:
       # Add pip-only packages here, if any from your script dependencies are not in conda-forge
+    - lxml_html_clean  # for cleaning HTML content from web scraping
