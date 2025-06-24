@@ -43,3 +43,9 @@ Then remove it with:
 %%
 conda env remove -n finance_env
 %%
+
+POLYBOX
+
+The AI that returns a sentiment score takes a long time to run.
+To save time, we can upload data from processed articles here:
+https://polybox.ethz.ch/index.php/s/R99PSQwT9e9CjYy
