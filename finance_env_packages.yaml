@@ -15,6 +15,7 @@ dependencies:
   - python-dateutil  # date parsing utilities
   - pip              # to install packages unavailable in conda
   - yfinance         # for fetching financial data
+  - pandas-datareader # for reading financial data from various sources
 
   #- pip:
       # Add pip-only packages here, if any from your script dependencies are not in conda-forge
