@@ -15,6 +15,9 @@ dependencies:
   - python-dateutil  # date parsing utilities
   - pip              # to install packages unavailable in conda
   - yfinance         # for fetching financial data
+  - newspaper3k      # for web scraping news articles
+  - finhub-python    # for financial data and news API
+  - lxml_html_clean  # for cleaning HTML content from web scraping
   - pandas-datareader # for reading financial data from various sources
 
   #- pip:

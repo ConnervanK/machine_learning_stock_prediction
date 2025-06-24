@@ -128,7 +128,12 @@ def analyze_and_save_sentiment(symbol, from_date, to_date, output_folder, output
         df['date'] = pd.to_datetime(df['date'], errors='coerce')  # Ensure 'date' is datetime
         df = df.sort_values(by="date")  # Sort by date
         df['date'] = df['date'].dt.strftime('%Y-%m-%d')  # Back to string format if needed
-        df.to_csv(output_path, index=False)
+
+        # Filter out again to ensure date range is correct
+        df = df[(df['date'] >= from_date) & (df['date'] <= to_date)]
+        
+        df.to_csv(output_path, index=False, encoding="utf-8-sig")
+
         print(f"Saved all results to {output_path}")
     else:
         print("No news articles found in the given date range. No file was saved.")
@@ -174,68 +179,6 @@ def analyze_and_save_sentiment(symbol, from_date, to_date, output_folder, output
 #     chunk_size_days=3,  # Custom interval
 #     max_workers=10
 # )
-
-
-
-
-
-# def create_csv_with_sentiment(input_csv, output_csv, day_interval=5, filter=True):
-#     """
-#     Read an input CSV file with stock data, analyze sentiment for each day_interval days, and save results to a new CSV.
-#     Args:
-#         input_csv (str): Path to the input CSV file.
-#         output_csv (str): Path to the output CSV file.
-#         day_interval (int): Number of days to group for sentiment analysis.
-#     """
-
-#     df = pd.read_csv(input_csv)
-#     df['date'] = pd.to_datetime(df['date'])
-    
-#     dates = df['date'].dt.date.unique()
-
-#     # if filter is True, filter out rows where df['used_full_article'] is False
-#     # if filter:
-#     #     df = df[df['used_full_article'] == True]
-#     #     print(f"Filtered out {len(df)} rows where 'used_full_article' is False.")
-
-#     # remap dates in df to numbers starting from 0
-#     date_to_index = {date: i for i, date in enumerate(dates)}
-#     df['date'] = df['date'].apply(lambda x: date_to_index[x.date()])  # Convert dates to indices
-#     df = df.sort_values(by='date')  # Ensure the dataframe is sorted by date
-#     dates_numbered = df['date'].unique()  # Get the unique numbered dates
-    
-#     # calculate grade of sentiment for each day in the day_interval
-#     sentiment_results = []
-    
-#     # iterate through the dates with the specified day interval
-#     for i in dates_numbered[::day_interval]:    
-#         if i + day_interval > len(dates):
-#             break
-
-#         start_date = dates[i]
-#         end_date = dates[i + day_interval - 1]
-#         interval_data = df[(df['date'] >= date_to_index[start_date]) & (df['date'] <= date_to_index[end_date])]
-        
-#         sentiment = (interval_data['positive'].sum() - interval_data['negative'].sum() + 0.2 * interval_data['neutral'].sum())/ ( interval_data['positive'].sum() + interval_data['negative'].sum() + interval_data['neutral'].sum() )  
-
-#         # map back to the date string
-#         interval_data['date'] = interval_data['date'].apply(lambda x: dates[x])
-
-#         sentiment_results.append({
-#             "date": start_date.strftime('%Y-%m-%d'),
-#             # "date": start_date.strftime('%Y-%m-%d') + " to " + end_date.strftime('%Y-%m-%d'),
-#             "negative": round(interval_data['negative'].mean(), 4),
-#             "neutral": round(interval_data['neutral'].mean(), 4),
-#             "positive": round(interval_data['positive'].mean(), 4),
-#             "sentiment": sentiment # positive - negative + 0.2 * neutral
-#             # "used_full_article": False,  # Placeholder, as we are not using full articles here
-#             # "headline": representative_text
-#         })
-
-#     # Save results to CSV
-#     sentiment_df = pd.DataFrame(sentiment_results)
-#     sentiment_df.to_csv(output_csv, index=False)
-#     print(f"Sentiment analysis results saved to {output_csv}")    
 
 
 def create_csv_with_sentiment_month(input_csv, output_csv, filter=True):
@@ -284,23 +227,7 @@ def create_csv_with_sentiment_month(input_csv, output_csv, filter=True):
     print(f"Sentiment analysis results saved to {output_csv}")
 
 
-create_csv_with_sentiment_month(input_csv="/home/marcohuy/ETH/AI_assisted/stocks_ml/data/SP500_sentiment_190124_040625_gpu_parallel.csv",
-                                output_csv="/home/marcohuy/ETH/AI_assisted/stocks_ml/data/SP500_sentiment_190124_040625_gpu_parallel_month.csv",
-                                filter=True)
+# create_csv_with_sentiment_month(input_csv="/home/marcohuy/ETH/AI_assisted/stocks_ml/data/SP500_sentiment_190124_040625_gpu_parallel.csv",
+#                                 output_csv="/home/marcohuy/ETH/AI_assisted/stocks_ml/data/SP500_sentiment_190124_040625_gpu_parallel_month.csv",
+#                                 filter=True)
 
-
-# create_csv_with_sentiment(input_csv="/home/marcohuy/ETH/AI_assisted/stocks_ml/data/SP500_sentiment_190124_040625_gpu_parallel.csv",
-#                             output_csv="/home/marcohuy/ETH/AI_assisted/stocks_ml/data/SP500_sentiment_190124_040625_gpu_parallel_5days_filter.csv",
-#                             day_interval=5, filter=True)
-# create_csv_with_sentiment(input_csv="/home/marcohuy/ETH/AI_assisted/stocks_ml/data/apple_sentiment_190124_040625_gpu_parallel.csv",
-#                             output_csv="/home/marcohuy/ETH/AI_assisted/stocks_ml/data/apple_sentiment_190124_040625_gpu_parallel_5days_filter.csv",
-#                             day_interval=5, filter=True)
-# create_csv_with_sentiment(input_csv="/home/marcohuy/ETH/AI_assisted/stocks_ml/data/microsoft_sentiment_190124_040625_gpu_parallel.csv",
-#                             output_csv="/home/marcohuy/ETH/AI_assisted/stocks_ml/data/microsoft_sentiment_190124_040625_gpu_parallel_5days_filter.csv",
-#                             day_interval=5, filter=True)
-# create_csv_with_sentiment(input_csv="/home/marcohuy/ETH/AI_assisted/stocks_ml/data/tesla_sentiment_190124_040625_gpu_parallel.csv",
-#                             output_csv="/home/marcohuy/ETH/AI_assisted/stocks_ml/data/tesla_sentiment_190124_040625_gpu_parallel_5days_filter.csv",
-#                             day_interval=5, filter=True)
-# # create_csv_with_sentiment(input_csv="/home/marcohuy/ETH/AI_assisted/stocks_ml/data/bitcoin_sentiment_190124_040625_gpu_parallel.csv",
-#                             output_csv="/home/marcohuy/ETH/AI_assisted/stocks_ml/data/bitcoin_sentiment_190124_040625_gpu_parallel_5days_filter.csv",
-#                             day_interval=5, filter=True)
