@@ -6,6 +6,8 @@ gdp, inflation, interest rate, unemployment rate, and exchange rate.
 Furthermore, I want the sentiment data to be downloaded in a similar way
 '''
 import pandas as pd
+from pandas_datareader import data as pdr
+
 import yfinance as yf
 from datetime import datetime, timedelta
 import os
@@ -65,8 +67,6 @@ def download_financial_data(tickers: List[str], start_date: str, end_date: str, 
 #     os.makedirs(folder)
 # # Download financial data
 # download_financial_data(tickers, start_date, end_date, 'financial_data.csv', folder)
-
-from pandas_datareader import data as pdr
 
 def download_gdp_data(start_date: str, end_date: str, filename: str, folder: str) -> None:
     """
@@ -240,10 +240,10 @@ def download_unemployment_rate_data(start_date: str, end_date: str, filename: st
     output_path = os.path.join(folder, filename)
     unemployment_data.to_csv(output_path, index=False)
     
-# example usage
-start_date = '2020-01-01'
-end_date = datetime.now().strftime('%Y-%m-%d')
-download_unemployment_rate_data(start_date, end_date, 'unemployment_rate_data.csv', folder='data')
+# # example usage
+# start_date = '2020-01-01'
+# end_date = datetime.now().strftime('%Y-%m-%d')
+# download_unemployment_rate_data(start_date, end_date, 'unemployment_rate_data.csv', folder='data')
 
 
 
