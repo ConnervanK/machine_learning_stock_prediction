@@ -158,9 +158,32 @@ with st.sidebar.expander("🔧 Debug Info"):
         if loaded_data:
             st.write("**Loaded datasets:**")
             for key, df in loaded_data.items():
-                st.write(f"- {key}: {df.shape} - {list(df.columns)}")
+                df_type = type(df).__name__
+                if hasattr(df, 'shape'):
+                    st.write(f"- {key}: {df_type} {df.shape}")
+                    if hasattr(df, 'columns'):
+                        st.write(f"  Columns: {list(df.columns)}")
+                    else:
+                        st.write(f"  No columns attribute (Series)")
+                else:
+                    st.write(f"- {key}: {df_type} (no shape attribute)")
         else:
             st.write("No data loaded")
+    
+    if st.button("Test Correlation Function"):
+        tensor_data, loaded_data = load_financial_data()
+        if loaded_data:
+            st.write("**Testing correlation function:**")
+            try:
+                import machine_learning_plotting as mlp
+                corr_matrix, found_vars, corr_df = mlp.create_half_correlation_plot3(loaded_data, plot=False, save=False)
+                st.write("✅ Correlation function worked")
+                st.write(f"Matrix shape: {corr_matrix.shape if hasattr(corr_matrix, 'shape') else 'No shape'}")
+                st.write(f"Found variables: {len(found_vars) if found_vars else 0}")
+            except Exception as e:
+                st.write(f"❌ Correlation function failed: {e}")
+        else:
+            st.write("No data to test")
 
 # Tab 1: Data Overview
 with tab1:
@@ -356,28 +379,77 @@ with tab3:
     
     if loaded_data is not None:
         try:
-            # Generate correlation matrix
-            corr_matrix, found_vars, corr_df = mlp.create_half_correlation_plot3(loaded_data, plot=False, save=False)
+            # Pre-process loaded_data to ensure all items are DataFrames
+            processed_data = {}
+            for key, df in loaded_data.items():
+                if isinstance(df, pd.Series):
+                    processed_data[key] = df.to_frame()
+                elif hasattr(df, 'columns'):  # It's a DataFrame
+                    processed_data[key] = df
+                else:
+                    st.warning(f"Skipping {key}: not a valid DataFrame or Series")
+                    continue
             
-            # Interactive correlation heatmap
-            fig_corr = px.imshow(
-                corr_matrix, 
-                labels=dict(x="Variables", y="Variables", color="Correlation"),
-                x=found_vars,
-                y=found_vars,
-                color_continuous_scale="RdBu_r",
-                title="Feature Correlation Matrix"
-            )
-            fig_corr.update_layout(height=600)
-            st.plotly_chart(fig_corr, use_container_width=True)
-            
-            # Top correlations
-            st.subheader("Strongest Correlations")
-            if corr_df is not None:
-                top_corr = corr_df.head(10)
-                st.dataframe(top_corr)
+            if processed_data:
+                # Generate correlation matrix
+                corr_matrix, found_vars, corr_df = mlp.create_half_correlation_plot3(processed_data, plot=False, save=False)
+                
+                # Interactive correlation heatmap
+                fig_corr = px.imshow(
+                    corr_matrix, 
+                    labels=dict(x="Variables", y="Variables", color="Correlation"),
+                    x=found_vars,
+                    y=found_vars,
+                    color_continuous_scale="RdBu_r",
+                    title="Feature Correlation Matrix"
+                )
+                fig_corr.update_layout(height=600)
+                st.plotly_chart(fig_corr, use_container_width=True)
+                
+                # Top correlations
+                st.subheader("Strongest Correlations")
+                if corr_df is not None and not corr_df.empty:
+                    top_corr = corr_df.head(10)
+                    st.dataframe(top_corr)
+                else:
+                    st.info("No correlation data available to display")
+            else:
+                st.warning("No valid data available for correlation analysis")
+                
         except Exception as e:
             st.error(f"Error generating correlation analysis: {e}")
+            st.expander("Debug Info").write(f"Error details: {str(e)}")
+            
+            # Fallback: Simple correlation matrix if the custom function fails
+            try:
+                st.subheader("Fallback: Simple Correlation Analysis")
+                all_numeric_data = []
+                column_names = []
+                
+                for key, df in loaded_data.items():
+                    if isinstance(df, pd.Series):
+                        df = df.to_frame()
+                    if hasattr(df, 'select_dtypes'):
+                        numeric_cols = df.select_dtypes(include=[np.number])
+                        for col in numeric_cols.columns:
+                            all_numeric_data.append(numeric_cols[col])
+                            column_names.append(f"{key}_{col}")
+                
+                if all_numeric_data:
+                    combined_df = pd.concat(all_numeric_data, axis=1, keys=column_names)
+                    corr_matrix = combined_df.corr()
+                    
+                    fig_simple = px.imshow(
+                        corr_matrix,
+                        title="Simple Correlation Matrix",
+                        color_continuous_scale="RdBu_r"
+                    )
+                    st.plotly_chart(fig_simple, use_container_width=True)
+                else:
+                    st.error("No numeric data found for correlation analysis")
+                    
+            except Exception as fallback_error:
+                st.error(f"Fallback correlation analysis also failed: {fallback_error}")
 
 # Tab 4: Predictions
 with tab4:
@@ -491,46 +563,111 @@ with tab5:
     sentiment_data = load_sentiment_data(selected_stock)
     
     if sentiment_data is not None:
-        # Sentiment overview
-        st.subheader("Sentiment Overview")
+        # Check what columns are available in sentiment data
+        available_columns = list(sentiment_data.columns)
         
-        # Sentiment metrics
-        avg_sentiment = sentiment_data['sentiment_score'].mean()
-        sentiment_std = sentiment_data['sentiment_score'].std()
-        
-        sent_col1, sent_col2, sent_col3 = st.columns(3)
-        with sent_col1:
-            st.metric("Average Sentiment", f"{avg_sentiment:.3f}")
-        with sent_col2:
-            st.metric("Sentiment Volatility", f"{sentiment_std:.3f}")
-        with sent_col3:
-            positive_pct = (sentiment_data['sentiment_score'] > 0).mean() * 100
-            st.metric("Positive News %", f"{positive_pct:.1f}%")
-        
-        # Sentiment over time
-        date_col = None
-        for col in sentiment_data.columns:
-            if 'date' in col.lower():
-                date_col = col
-                break
-        
-        if date_col is not None:
-            try:
-                sentiment_dates = pd.to_datetime(sentiment_data[date_col])
-                fig_sent = px.line(x=sentiment_dates, y=sentiment_data['sentiment_score'], 
-                                 title="Sentiment Score Over Time")
-                fig_sent.update_xaxes(title="Date")
-                fig_sent.update_yaxes(title="Sentiment Score")
-                st.plotly_chart(fig_sent, use_container_width=True)
-            except Exception as e:
-                st.error(f"Error plotting sentiment over time: {e}")
+        # Calculate sentiment score if individual sentiment columns exist
+        if 'sentiment_score' in available_columns:
+            sentiment_col = 'sentiment_score'
+        elif all(col in available_columns for col in ['positive', 'negative', 'neutral']):
+            # Calculate composite sentiment score: positive - negative
+            sentiment_data['sentiment_score'] = sentiment_data['positive'] - sentiment_data['negative']
+            sentiment_col = 'sentiment_score'
+        elif 'positive' in available_columns:
+            sentiment_col = 'positive'
         else:
-            st.warning("Date column not found in sentiment data")
+            # Find any numeric column that might represent sentiment
+            numeric_cols = sentiment_data.select_dtypes(include=[np.number]).columns.tolist()
+            sentiment_col = numeric_cols[0] if numeric_cols else None
         
-        # Sentiment distribution
-        fig_dist = px.histogram(sentiment_data, x='sentiment_score', 
-                               title="Distribution of Sentiment Scores")
-        st.plotly_chart(fig_dist, use_container_width=True)
+        if sentiment_col is not None:
+            # Sentiment overview
+            st.subheader("Sentiment Overview")
+            
+            # Sentiment metrics
+            avg_sentiment = sentiment_data[sentiment_col].mean()
+            sentiment_std = sentiment_data[sentiment_col].std()
+            
+            sent_col1, sent_col2, sent_col3 = st.columns(3)
+            with sent_col1:
+                st.metric("Average Sentiment", f"{avg_sentiment:.3f}")
+            with sent_col2:
+                st.metric("Sentiment Volatility", f"{sentiment_std:.3f}")
+            with sent_col3:
+                if sentiment_col == 'sentiment_score' or sentiment_col == 'positive':
+                    positive_pct = (sentiment_data[sentiment_col] > 0).mean() * 100
+                    st.metric("Positive %", f"{positive_pct:.1f}%")
+                else:
+                    st.metric("Data Points", f"{len(sentiment_data)}")
+            
+            # Show column breakdown if available
+            if all(col in available_columns for col in ['positive', 'negative', 'neutral']):
+                st.subheader("Sentiment Breakdown")
+                breakdown_cols = st.columns(3)
+                with breakdown_cols[0]:
+                    avg_pos = sentiment_data['positive'].mean()
+                    st.metric("Avg Positive", f"{avg_pos:.3f}")
+                with breakdown_cols[1]:
+                    avg_neu = sentiment_data['neutral'].mean()
+                    st.metric("Avg Neutral", f"{avg_neu:.3f}")
+                with breakdown_cols[2]:
+                    avg_neg = sentiment_data['negative'].mean()
+                    st.metric("Avg Negative", f"{avg_neg:.3f}")
+            
+            # Sentiment over time
+            date_col = None
+            for col in sentiment_data.columns:
+                if 'date' in col.lower():
+                    date_col = col
+                    break
+            
+            if date_col is not None:
+                try:
+                    sentiment_dates = pd.to_datetime(sentiment_data[date_col])
+                    
+                    # Plot main sentiment metric
+                    fig_sent = px.line(x=sentiment_dates, y=sentiment_data[sentiment_col], 
+                                     title=f"{sentiment_col.title()} Over Time")
+                    fig_sent.update_xaxes(title="Date")
+                    fig_sent.update_yaxes(title=sentiment_col.title())
+                    st.plotly_chart(fig_sent, use_container_width=True)
+                    
+                    # If we have breakdown data, show it too
+                    if all(col in available_columns for col in ['positive', 'negative', 'neutral']):
+                        fig_breakdown = go.Figure()
+                        fig_breakdown.add_trace(go.Scatter(
+                            x=sentiment_dates, y=sentiment_data['positive'],
+                            mode='lines', name='Positive', line=dict(color='green')
+                        ))
+                        fig_breakdown.add_trace(go.Scatter(
+                            x=sentiment_dates, y=sentiment_data['negative'],
+                            mode='lines', name='Negative', line=dict(color='red')
+                        ))
+                        fig_breakdown.add_trace(go.Scatter(
+                            x=sentiment_dates, y=sentiment_data['neutral'],
+                            mode='lines', name='Neutral', line=dict(color='gray')
+                        ))
+                        fig_breakdown.update_layout(
+                            title="Sentiment Components Over Time",
+                            xaxis_title="Date",
+                            yaxis_title="Sentiment Score",
+                            height=400
+                        )
+                        st.plotly_chart(fig_breakdown, use_container_width=True)
+                        
+                except Exception as e:
+                    st.error(f"Error plotting sentiment over time: {e}")
+            else:
+                st.warning("Date column not found in sentiment data")
+            
+            # Sentiment distribution
+            fig_dist = px.histogram(sentiment_data, x=sentiment_col, 
+                                   title=f"Distribution of {sentiment_col.title()}")
+            st.plotly_chart(fig_dist, use_container_width=True)
+            
+        else:
+            st.error("No suitable sentiment column found in the data")
+            st.write("Available columns:", available_columns)
         
     else:
         st.warning(f"No sentiment data available for {selected_stock_name}")
@@ -558,14 +695,28 @@ with tab6:
     if loaded_data is not None:
         available_features = []
         for dataset_name, df in loaded_data.items():
-            numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
-            available_features.extend([f"{dataset_name}:{col}" for col in numeric_cols])
+            # Ensure df is a DataFrame
+            if isinstance(df, pd.Series):
+                df = df.to_frame()
+            
+            # Check if df is a DataFrame and has the select_dtypes method
+            if hasattr(df, 'select_dtypes'):
+                try:
+                    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+                    available_features.extend([f"{dataset_name}:{col}" for col in numeric_cols])
+                except Exception as e:
+                    st.warning(f"Could not process {dataset_name}: {e}")
+            else:
+                st.warning(f"{dataset_name} is not a valid DataFrame: {type(df)}")
         
-        selected_features = st.multiselect(
-            "Select Features for Training:",
-            available_features,
-            default=available_features[:5] if len(available_features) >= 5 else available_features
-        )
+        if available_features:
+            selected_features = st.multiselect(
+                "Select Features for Training:",
+                available_features,
+                default=available_features[:5] if len(available_features) >= 5 else available_features
+            )
+        else:
+            st.warning("No numeric features found in the loaded data.")
     
     # Model management
     st.subheader("Model Management")
