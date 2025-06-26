@@ -1,0 +1,51 @@
+name: Test ML Stock Prediction
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.8, 3.9, '3.10', 3.11]
+
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v3
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Test basic functionality
+      run: |
+        python minimal_test.py
+    
+    - name: Test dashboard imports
+      run: |
+        python -c "
+        import sys
+        sys.path.append('./src')
+        try:
+            import streamlit as st
+            import machine_learning_data as mld
+            import machine_learning_plotting as mlp
+            print('✅ All imports successful')
+        except ImportError as e:
+            print(f'❌ Import error: {e}')
+            sys.exit(1)
+        "
+    
+    - name: Validate dashboard syntax
+      run: |
+        python -m py_compile streamlit_dashboard.py
+        echo "✅ Dashboard syntax is valid"
