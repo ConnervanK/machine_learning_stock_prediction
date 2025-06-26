@@ -99,10 +99,15 @@ def load_financial_data():
         existing_files = [f for f in data_files if os.path.exists(f)]
         
         if not existing_files:
-            st.error("Data files not found. Please ensure data is downloaded.")
             return None, None
             
+        # Import here to avoid circular imports
+        import machine_learning_dataloading as mldl
+        
         tensor_data, loaded_data = mldl.create_tensor_from_csvs(existing_files)
+        
+        if loaded_data is None:
+            return None, None
         
         # Clean up loaded_data for Streamlit compatibility
         cleaned_data = {}
@@ -125,13 +130,17 @@ def load_financial_data():
                         clean_df[col] = clean_df[col].astype(str)
                 
                 cleaned_data[key] = clean_df
+            elif isinstance(df, pd.Series):
+                # Convert Series to DataFrame
+                cleaned_data[key] = df.to_frame()
             else:
                 cleaned_data[key] = df
                 
         return tensor_data, cleaned_data
         
     except Exception as e:
-        st.error(f"Error loading data: {e}")
+        # For debugging, we'll return the error info
+        st.error(f"Error in load_financial_data: {e}")
         return None, None
 
 # Load sentiment data
@@ -189,28 +198,249 @@ with st.sidebar.expander("🔧 Debug Info"):
 with tab1:
     st.header("📊 Financial Data Overview")
     
-    # Load data
-    tensor_data, loaded_data = load_financial_data()
+    # Debug: Show data loading status
+    with st.expander("🔧 Data Loading Status", expanded=False):
+        st.write("Checking data files...")
+        
+        # Check if data files exist
+        data_files = [
+            './data/financial_data.csv',
+            './data/gdp_data.csv', 
+            './data/interest_rate_data.csv',
+            './data/inflation_data.csv',
+            './data/unemployment_rate_data.csv'
+        ]
+        
+        existing_files = [f for f in data_files if os.path.exists(f)]
+        missing_files = [f for f in data_files if not os.path.exists(f)]
+        
+        st.write(f"✅ Found {len(existing_files)} files:")
+        for f in existing_files:
+            st.write(f"  - {f}")
+        
+        if missing_files:
+            st.write(f"❌ Missing {len(missing_files)} files:")
+            for f in missing_files:
+                st.write(f"  - {f}")
     
-    if loaded_data is not None:
-        # Display data summary
-        col1, col2, col3, col4 = st.columns(4)
+    # Load data with detailed error reporting
+    try:
+        st.write("🔄 Loading data...")
+        tensor_data, loaded_data = load_financial_data()
         
-        if 'financial_data.csv' in loaded_data:
-            financial_df = loaded_data['financial_data.csv']
+        if loaded_data is None:
+            st.error("❌ Data loading returned None")
+            st.write("**Possible solutions:**")
+            st.write("1. Run the data download: `python src/polybox_download.py`")
+            st.write("2. Check if data files exist in the `./data/` folder")
+            st.write("3. Ensure the data loading functions work correctly")
+            st.stop()
+        
+        if not loaded_data:
+            st.error("❌ Data loading returned empty dictionary")
+            st.stop()
+        
+        st.success(f"✅ Successfully loaded {len(loaded_data)} datasets")
+        
+        # Show what data was loaded
+        with st.expander("📋 Loaded Data Summary"):
+            for key, df in loaded_data.items():
+                if hasattr(df, 'shape'):
+                    st.write(f"- **{key}**: {df.shape[0]} rows, {df.shape[1]} columns")
+                else:
+                    st.write(f"- **{key}**: {type(df)} (not a DataFrame)")
+        
+    except Exception as e:
+        st.error(f"❌ Error loading data: {e}")
+        st.write("**Debug info:**")
+        st.code(str(e))
+        st.stop()
+    
+    # Display data summary only if we have data
+    if loaded_data is not None and len(loaded_data) > 0:
+        
+        # Reconstruct financial data from individual Series
+        financial_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
+        financial_data = {}
+        date_data = None
+        
+        # Look for financial data columns and date
+        for key, data in loaded_data.items():
+            if key.lower() == 'date' or 'date' in key.lower():
+                date_data = data
+            elif any(col.lower() in key.lower() for col in financial_columns):
+                # Find which financial column this is
+                for col in financial_columns:
+                    if col.lower() in key.lower():
+                        financial_data[col] = data
+                        break
+        
+        # Create financial DataFrame if we have the components
+        financial_df = None
+        if financial_data and date_data is not None:
+            try:
+                # Convert Series to DataFrame if needed
+                df_dict = {}
+                if hasattr(date_data, 'values'):
+                    df_dict['date'] = date_data.values if hasattr(date_data, 'values') else date_data
+                else:
+                    df_dict['date'] = date_data
+                    
+                for col, data in financial_data.items():
+                    if hasattr(data, 'values'):
+                        df_dict[col] = data.values
+                    else:
+                        df_dict[col] = data
+                
+                financial_df = pd.DataFrame(df_dict)
+                st.success(f"✅ Reconstructed financial data with {len(financial_df)} rows")
+                
+            except Exception as e:
+                st.warning(f"Could not reconstruct financial DataFrame: {e}")
+                # Try alternative approach - use the raw loaded_data
+                if 'financial_data.csv' in loaded_data:
+                    financial_df = loaded_data['financial_data.csv']
+        
+        # Alternative: look for any DataFrame that might contain financial data
+        if financial_df is None:
+            for key, df in loaded_data.items():
+                if hasattr(df, 'columns') and len(df.columns) > 1:
+                    # Check if it has financial-like columns
+                    cols = [c.lower() for c in df.columns]
+                    if any(fin_col.lower() in ' '.join(cols) for fin_col in financial_columns):
+                        financial_df = df
+                        st.info(f"Using {key} as financial data source")
+                        break
+        
+        # Display metrics if we have financial data
+        if financial_df is not None and len(financial_df) > 0:
+            col1, col2, col3, col4 = st.columns(4)
             
-            with col1:
-                st.metric("Current Price", f"${financial_df['Close'].iloc[-1]:.2f}")
-            with col2:
-                price_change = financial_df['Close'].iloc[-1] - financial_df['Close'].iloc[-2]
-                st.metric("Daily Change", f"${price_change:.2f}", delta=f"{(price_change/financial_df['Close'].iloc[-2]*100):.2f}%")
-            with col3:
-                st.metric("Volume", f"{financial_df['Volume'].iloc[-1]:,.0f}")
-            with col4:
-                volatility = financial_df['Close'].pct_change().std() * np.sqrt(252) * 100
-                st.metric("Volatility (252d)", f"{volatility:.2f}%")
+            try:
+                with col1:
+                    if 'Close' in financial_df.columns:
+                        current_price = financial_df['Close'].iloc[-1]
+                        st.metric("Current Price", f"${current_price:.2f}")
+                    else:
+                        st.metric("Current Price", "N/A")
+                        
+                with col2:
+                    if 'Close' in financial_df.columns and len(financial_df) > 1:
+                        current_price = financial_df['Close'].iloc[-1]
+                        prev_price = financial_df['Close'].iloc[-2]
+                        price_change = current_price - prev_price
+                        pct_change = (price_change / prev_price) * 100
+                        st.metric("Daily Change", f"${price_change:.2f}", delta=f"{pct_change:.2f}%")
+                    else:
+                        st.metric("Daily Change", "N/A")
+                        
+                with col3:
+                    if 'Volume' in financial_df.columns:
+                        volume = financial_df['Volume'].iloc[-1]
+                        st.metric("Volume", f"{volume:,.0f}")
+                    else:
+                        st.metric("Volume", "N/A")
+                        
+                with col4:
+                    if 'Close' in financial_df.columns and len(financial_df) > 252:
+                        volatility = financial_df['Close'].pct_change().std() * np.sqrt(252) * 100
+                        st.metric("Volatility (252d)", f"{volatility:.2f}%")
+                    else:
+                        st.metric("Volatility", "N/A")
+                        
+            except Exception as e:
+                st.error(f"Error calculating metrics: {e}")
+        else:
+            st.warning("Could not find or reconstruct financial data")
+            st.write("**Available data keys:**")
+            for key in loaded_data.keys():
+                st.write(f"- {key}")
         
-        # Financial data plot
+        # Financial data plot using your plotting function
+        st.subheader("Price History")
+        
+        if financial_df is not None and len(financial_df) > 0:
+            try:
+                # Use your plotting function approach but adapt for Streamlit/Plotly
+                if 'date' in financial_df.columns:
+                    # Set date as index for plotting
+                    plot_df = financial_df.copy()
+                    plot_df['date'] = pd.to_datetime(plot_df['date'])
+                    plot_df = plot_df.set_index('date')
+                else:
+                    plot_df = financial_df.copy()
+                
+                # Create interactive plots with Plotly
+                financial_columns_present = [col for col in ['Open', 'High', 'Low', 'Close', 'Volume'] 
+                                           if col in plot_df.columns]
+                
+                if financial_columns_present:
+                    # Candlestick chart if we have OHLC data
+                    if all(col in plot_df.columns for col in ['Open', 'High', 'Low', 'Close']):
+                        fig = go.Figure(data=go.Candlestick(
+                            x=plot_df.index,
+                            open=plot_df['Open'],
+                            high=plot_df['High'],
+                            low=plot_df['Low'],
+                            close=plot_df['Close'],
+                            name="Price"
+                        ))
+                        fig.update_layout(
+                            title=f"{selected_stock_name} Candlestick Chart",
+                            xaxis_title="Date",
+                            yaxis_title="Price ($)",
+                            height=500
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+                    
+                    # Individual price plots
+                    if len(financial_columns_present) > 0:
+                        price_cols = [col for col in financial_columns_present if col != 'Volume']
+                        if price_cols:
+                            fig_prices = go.Figure()
+                            colors = {'Open': 'blue', 'High': 'red', 'Low': 'orange', 'Close': 'green'}
+                            
+                            for col in price_cols:
+                                fig_prices.add_trace(go.Scatter(
+                                    x=plot_df.index,
+                                    y=plot_df[col],
+                                    mode='lines',
+                                    name=col,
+                                    line=dict(color=colors.get(col, 'gray'))
+                                ))
+                            
+                            fig_prices.update_layout(
+                                title="Price Components Over Time",
+                                xaxis_title="Date",
+                                yaxis_title="Price ($)",
+                                height=400
+                            )
+                            st.plotly_chart(fig_prices, use_container_width=True)
+                    
+                    # Volume chart if available
+                    if 'Volume' in plot_df.columns:
+                        fig_volume = go.Figure()
+                        fig_volume.add_trace(go.Bar(
+                            x=plot_df.index,
+                            y=plot_df['Volume'],
+                            name='Volume',
+                            marker_color='darkblue'
+                        ))
+                        fig_volume.update_layout(
+                            title="Trading Volume",
+                            xaxis_title="Date",
+                            yaxis_title="Volume",
+                            height=300
+                        )
+                        st.plotly_chart(fig_volume, use_container_width=True)
+                else:
+                    st.warning("No recognizable financial columns found for plotting")
+                    
+            except Exception as e:
+                st.error(f"Error creating plots: {e}")
+                st.write("**Available columns:**", list(financial_df.columns) if financial_df is not None else "None")
+        else:
+            st.warning("No financial data available for plotting")
         st.subheader("Price History")
         if 'financial_data.csv' in loaded_data:
             try:
@@ -379,77 +609,162 @@ with tab3:
     
     if loaded_data is not None:
         try:
-            # Pre-process loaded_data to ensure all items are DataFrames
-            processed_data = {}
-            for key, df in loaded_data.items():
-                if isinstance(df, pd.Series):
-                    processed_data[key] = df.to_frame()
-                elif hasattr(df, 'columns'):  # It's a DataFrame
-                    processed_data[key] = df
-                else:
-                    st.warning(f"Skipping {key}: not a valid DataFrame or Series")
-                    continue
+            # Create a robust correlation analysis that works with our data structure
+            st.subheader("Building Correlation Matrix...")
             
-            if processed_data:
-                # Generate correlation matrix
-                corr_matrix, found_vars, corr_df = mlp.create_half_correlation_plot3(processed_data, plot=False, save=False)
+            # Collect all numeric data from all datasets
+            all_numeric_data = []
+            column_names = []
+            
+            for dataset_name, df in loaded_data.items():
+                # Ensure we have a DataFrame
+                if isinstance(df, pd.Series):
+                    df = df.to_frame()
+                
+                if hasattr(df, 'select_dtypes'):
+                    # Get numeric columns, excluding date-like columns
+                    numeric_cols = df.select_dtypes(include=[np.number])
+                    
+                    for col in numeric_cols.columns:
+                        # Skip columns that look like dates or indices
+                        if 'date' not in col.lower() and 'index' not in col.lower():
+                            clean_col_name = f"{dataset_name.replace('.csv', '')}_{col}"
+                            all_numeric_data.append(numeric_cols[col])
+                            column_names.append(clean_col_name)
+                            st.write(f"✅ Added {clean_col_name}")
+            
+            if len(all_numeric_data) >= 2:
+                # Combine all numeric data
+                combined_df = pd.concat(all_numeric_data, axis=1, keys=column_names)
+                
+                # Remove any rows with all NaN values
+                combined_df = combined_df.dropna(how='all')
+                
+                # Calculate correlation matrix
+                corr_matrix = combined_df.corr()
+                
+                st.success(f"Created correlation matrix with {len(column_names)} variables")
                 
                 # Interactive correlation heatmap
                 fig_corr = px.imshow(
-                    corr_matrix, 
+                    corr_matrix,
+                    labels=dict(x="Variables", y="Variables", color="Correlation"),
+                    color_continuous_scale="RdBu_r",
+                    title=f"Feature Correlation Matrix ({len(column_names)} variables)",
+                    aspect="auto"
+                )
+                fig_corr.update_layout(
+                    height=max(600, len(column_names) * 30),
+                    xaxis={'side': 'bottom'},
+                    font=dict(size=10)
+                )
+                st.plotly_chart(fig_corr, use_container_width=True)
+                
+                # Top correlations (excluding self-correlations)
+                st.subheader("Strongest Correlations")
+                
+                # Create correlation pairs
+                corr_pairs = []
+                for i in range(len(corr_matrix.columns)):
+                    for j in range(i+1, len(corr_matrix.columns)):
+                        var1 = corr_matrix.columns[i]
+                        var2 = corr_matrix.columns[j]
+                        corr_value = corr_matrix.iloc[i, j]
+                        
+                        if not pd.isna(corr_value):
+                            corr_pairs.append({
+                                'Variable 1': var1,
+                                'Variable 2': var2,
+                                'Correlation': corr_value,
+                                'Abs Correlation': abs(corr_value)
+                            })
+                
+                if corr_pairs:
+                    corr_df = pd.DataFrame(corr_pairs)
+                    corr_df = corr_df.sort_values('Abs Correlation', ascending=False)
+                    
+                    # Display top 15 correlations
+                    top_corr = corr_df.head(15)
+                    
+                    # Format the correlation values for better display
+                    display_df = top_corr.copy()
+                    display_df['Correlation'] = display_df['Correlation'].round(3)
+                    display_df = display_df.drop('Abs Correlation', axis=1)
+                    
+                    st.dataframe(display_df, use_container_width=True)
+                    
+                    # Create a bar chart of top correlations
+                    fig_bar = px.bar(
+                        top_corr.head(10),
+                        x='Abs Correlation',
+                        y=[f"{row['Variable 1']} vs {row['Variable 2']}" for _, row in top_corr.head(10).iterrows()],
+                        orientation='h',
+                        title="Top 10 Strongest Correlations (by absolute value)",
+                        color='Correlation',
+                        color_continuous_scale="RdBu_r"
+                    )
+                    fig_bar.update_layout(height=500)
+                    st.plotly_chart(fig_bar, use_container_width=True)
+                else:
+                    st.warning("No valid correlations found")
+                    
+            else:
+                st.warning(f"Need at least 2 numeric variables for correlation analysis. Found: {len(all_numeric_data)}")
+                
+                # Show what we found
+                if column_names:
+                    st.write("Available numeric columns:")
+                    for name in column_names:
+                        st.write(f"- {name}")
+                        
+        except Exception as e:
+            st.error(f"Error in correlation analysis: {e}")
+            
+            # Enhanced debug information
+            with st.expander("🔧 Debug Information"):
+                st.write("**Error Details:**")
+                st.code(str(e))
+                
+                st.write("**Data Structure:**")
+                for key, df in loaded_data.items():
+                    st.write(f"- {key}: {type(df)} - {df.shape if hasattr(df, 'shape') else 'No shape'}")
+                    if hasattr(df, 'columns'):
+                        st.write(f"  Columns: {list(df.columns)}")
+                
+            # Try alternative method using the original function if available
+            try:
+                st.subheader("Attempting Alternative Correlation Method...")
+                
+                # Convert the data structure to what the original function expects
+                clean_loaded_data = {}
+                for key, df in loaded_data.items():
+                    if isinstance(df, pd.Series):
+                        df = df.to_frame()
+                    clean_loaded_data[key] = df
+                
+                # Try the original function with cleaned data
+                corr_matrix, found_vars, corr_df = mlp.create_half_correlation_plot3(
+                    clean_loaded_data, plot=False, save=False
+                )
+                
+                st.success("Alternative method worked!")
+                
+                # Display the results
+                fig_alt = px.imshow(
+                    corr_matrix,
                     labels=dict(x="Variables", y="Variables", color="Correlation"),
                     x=found_vars,
                     y=found_vars,
                     color_continuous_scale="RdBu_r",
-                    title="Feature Correlation Matrix"
+                    title="Alternative Correlation Matrix"
                 )
-                fig_corr.update_layout(height=600)
-                st.plotly_chart(fig_corr, use_container_width=True)
+                st.plotly_chart(fig_alt, use_container_width=True)
                 
-                # Top correlations
-                st.subheader("Strongest Correlations")
-                if corr_df is not None and not corr_df.empty:
-                    top_corr = corr_df.head(10)
-                    st.dataframe(top_corr)
-                else:
-                    st.info("No correlation data available to display")
-            else:
-                st.warning("No valid data available for correlation analysis")
-                
-        except Exception as e:
-            st.error(f"Error generating correlation analysis: {e}")
-            st.expander("Debug Info").write(f"Error details: {str(e)}")
-            
-            # Fallback: Simple correlation matrix if the custom function fails
-            try:
-                st.subheader("Fallback: Simple Correlation Analysis")
-                all_numeric_data = []
-                column_names = []
-                
-                for key, df in loaded_data.items():
-                    if isinstance(df, pd.Series):
-                        df = df.to_frame()
-                    if hasattr(df, 'select_dtypes'):
-                        numeric_cols = df.select_dtypes(include=[np.number])
-                        for col in numeric_cols.columns:
-                            all_numeric_data.append(numeric_cols[col])
-                            column_names.append(f"{key}_{col}")
-                
-                if all_numeric_data:
-                    combined_df = pd.concat(all_numeric_data, axis=1, keys=column_names)
-                    corr_matrix = combined_df.corr()
-                    
-                    fig_simple = px.imshow(
-                        corr_matrix,
-                        title="Simple Correlation Matrix",
-                        color_continuous_scale="RdBu_r"
-                    )
-                    st.plotly_chart(fig_simple, use_container_width=True)
-                else:
-                    st.error("No numeric data found for correlation analysis")
-                    
-            except Exception as fallback_error:
-                st.error(f"Fallback correlation analysis also failed: {fallback_error}")
+            except Exception as alt_error:
+                st.warning(f"Alternative method also failed: {alt_error}")
+    
+    else:
+        st.warning("No data available for correlation analysis. Please load data first.")
 
 # Tab 4: Predictions
 with tab4:
