@@ -6,21 +6,35 @@ Built with Streamlit for interactive visualization and model management
 import streamlit as st
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
+from matplotlib.ticker import FuncFormatter
+import matplotlib.gridspec as gridspec
 import plotly.graph_objects as go
 import plotly.express as px
 from plotly.subplots import make_subplots
 import sys
 import os
+import importlib
 
 # Add src directory to Python path
 sys.path.append('./src')
 
-# Import your custom modules
+# Import your custom modules - following machine_learning_main.ipynb structure
 try:
     import machine_learning_data as mld
     import machine_learning_plotting as mlp
     import machine_learning_training as mlt
     import machine_learning_dataloading as mldl
+    from download_csv import *
+    from machine_learning_BERT_articles import *
+    from create_tensor import *
+    
+    # Reload modules to get latest changes (following notebook pattern)
+    importlib.reload(mlp)
+    importlib.reload(mld)
+    importlib.reload(mlt)
+    importlib.reload(mldl)
 except ImportError as e:
     st.error(f"Error importing custom modules: {e}")
     st.stop()
@@ -81,65 +95,25 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs([
     "⚙️ Model Config"
 ])
 
-# Load data function with caching
+# Load data function with caching - following machine_learning_main.ipynb pattern
 @st.cache_data
 def load_financial_data():
-    """Load and cache financial data"""
+    """Load and cache financial data using the pattern from machine_learning_main.ipynb"""
     try:
-        # Load your existing data
-        data_files = [
-            './data/financial_data.csv',
+        # Following the exact pattern from machine_learning_main.ipynb
+        # Create tensor from CSV files - this loads and aligns all data
+        tensor_data, loaded_data = mldl.create_tensor_from_csvs([
+            './data/financial_data.csv', 
             './data/gdp_data.csv', 
             './data/interest_rate_data.csv',
             './data/inflation_data.csv',
-            './data/unemployment_rate_data.csv'
-        ]
+            './data/unemployment_rate_data.csv',
+            './data/SP500_sentiment_gpu_parallel_filtered.csv'
+        ])
         
-        # Check if files exist
-        existing_files = [f for f in data_files if os.path.exists(f)]
-        
-        if not existing_files:
-            return None, None
-            
-        # Import here to avoid circular imports
-        import machine_learning_dataloading as mldl
-        
-        tensor_data, loaded_data = mldl.create_tensor_from_csvs(existing_files)
-        
-        if loaded_data is None:
-            return None, None
-        
-        # Clean up loaded_data for Streamlit compatibility
-        cleaned_data = {}
-        for key, df in loaded_data.items():
-            if isinstance(df, pd.DataFrame):
-                # Make a copy to avoid modifying original data
-                clean_df = df.copy()
-                
-                # Handle date columns for Arrow compatibility
-                for col in clean_df.columns:
-                    if 'date' in col.lower():
-                        try:
-                            # Convert to datetime then to string format
-                            clean_df[col] = pd.to_datetime(clean_df[col]).dt.strftime('%Y-%m-%d')
-                        except:
-                            # If conversion fails, keep as string
-                            clean_df[col] = clean_df[col].astype(str)
-                    elif clean_df[col].dtype == 'object':
-                        # Convert other object columns to string
-                        clean_df[col] = clean_df[col].astype(str)
-                
-                cleaned_data[key] = clean_df
-            elif isinstance(df, pd.Series):
-                # Convert Series to DataFrame
-                cleaned_data[key] = df.to_frame()
-            else:
-                cleaned_data[key] = df
-                
-        return tensor_data, cleaned_data
+        return tensor_data, loaded_data
         
     except Exception as e:
-        # For debugging, we'll return the error info
         st.error(f"Error in load_financial_data: {e}")
         return None, None
 
@@ -194,363 +168,206 @@ with st.sidebar.expander("🔧 Debug Info"):
         else:
             st.write("No data to test")
 
+# Helper function to display matplotlib plots in Streamlit
+def display_matplotlib_plot(fig):
+    """Display a matplotlib figure in Streamlit"""
+    st.pyplot(fig, clear_figure=True)
+
+# Helper function to capture plot from mlp functions for display
+def capture_mlp_plot(plot_func, *args, **kwargs):
+    """Capture matplotlib plot from mlp functions and display in Streamlit"""
+    # Temporarily disable the plot parameter and capture the figure  
+    if 'plot' in kwargs:
+        kwargs['plot'] = False
+    
+    # Call the function to get data, then create plot manually if needed
+    result = plot_func(*args, **kwargs)
+    return result
+
+# Enhanced matplotlib integration for Streamlit
+def streamlit_show_mlp_plots(loaded_data):
+    """
+    Display plots from machine_learning_plotting functions in Streamlit
+    This handles the matplotlib to streamlit conversion
+    """
+    try:
+        import matplotlib
+        matplotlib.use('Agg')  # Use non-interactive backend
+        
+        # Temporarily store the current plt state
+        import matplotlib.pyplot as plt
+        
+        # Clear any existing plots
+        plt.close('all')
+        
+        # Call the plotting function - it will create figures
+        st.write("Creating financial data plots...")
+        
+        # Patch plt.show() to capture figures instead of displaying them
+        original_show = plt.show
+        captured_figures = []
+        
+        def capture_show(block=None):
+            # Instead of showing, save the current figure
+            current_fig = plt.gcf()
+            if current_fig.get_axes():  # Only save if figure has content
+                captured_figures.append(current_fig)
+            # Create a new figure for the next plot
+            plt.figure(figsize=(14, 10))
+        
+        # Replace plt.show temporarily
+        plt.show = capture_show
+        
+        try:
+            # Now call the mlp function - it will use our custom show function
+            mlp.plot_financial_data_from_tensor(loaded_data, plot=True)
+            
+            # Display all captured figures in Streamlit
+            for i, fig in enumerate(captured_figures):
+                st.pyplot(fig, clear_figure=True)
+                
+        finally:
+            # Restore original plt.show
+            plt.show = original_show
+            plt.close('all')
+            
+        if not captured_figures:
+            st.warning("No plots were generated by the plotting function")
+            
+    except Exception as e:
+        st.error(f"Error in streamlit_show_mlp_plots: {e}")
+        st.code(str(e))
+
 # Tab 1: Data Overview
 with tab1:
     st.header("📊 Financial Data Overview")
     
-    # Debug: Show data loading status
-    with st.expander("🔧 Data Loading Status", expanded=False):
-        st.write("Checking data files...")
-        
-        # Check if data files exist
-        data_files = [
-            './data/financial_data.csv',
-            './data/gdp_data.csv', 
-            './data/interest_rate_data.csv',
-            './data/inflation_data.csv',
-            './data/unemployment_rate_data.csv'
-        ]
-        
-        existing_files = [f for f in data_files if os.path.exists(f)]
-        missing_files = [f for f in data_files if not os.path.exists(f)]
-        
-        st.write(f"✅ Found {len(existing_files)} files:")
-        for f in existing_files:
-            st.write(f"  - {f}")
-        
-        if missing_files:
-            st.write(f"❌ Missing {len(missing_files)} files:")
-            for f in missing_files:
-                st.write(f"  - {f}")
-    
-    # Load data with detailed error reporting
+    # Load data with detailed error reporting - following machine_learning_main.ipynb pattern
     try:
-        st.write("🔄 Loading data...")
+        st.write("🔄 Loading data using tensor creation...")
         tensor_data, loaded_data = load_financial_data()
         
         if loaded_data is None:
             st.error("❌ Data loading returned None")
             st.write("**Possible solutions:**")
-            st.write("1. Run the data download: `python src/polybox_download.py`")
-            st.write("2. Check if data files exist in the `./data/` folder")
-            st.write("3. Ensure the data loading functions work correctly")
+            st.write("1. Ensure data files exist in the `./data/` folder")
+            st.write("2. Run data download scripts if needed")
+            st.write("3. Check if tensor creation functions work correctly")
             st.stop()
         
-        if not loaded_data:
-            st.error("❌ Data loading returned empty dictionary")
-            st.stop()
+        st.success(f"✅ Successfully loaded tensor data with shape: {tensor_data.shape if tensor_data is not None else 'N/A'}")
         
-        st.success(f"✅ Successfully loaded {len(loaded_data)} datasets")
-        
-        # Show what data was loaded
-        with st.expander("📋 Loaded Data Summary"):
-            for key, df in loaded_data.items():
-                if hasattr(df, 'shape'):
-                    st.write(f"- **{key}**: {df.shape[0]} rows, {df.shape[1]} columns")
-                else:
-                    st.write(f"- **{key}**: {type(df)} (not a DataFrame)")
-        
+        # Debug information
+        with st.expander("� Data Loading Debug Info", expanded=False):
+            st.write(f"**Tensor data shape:** {tensor_data.shape if tensor_data is not None else 'None'}")
+            st.write(f"**Loaded data type:** {type(loaded_data)}")
+            if hasattr(loaded_data, 'columns'):
+                st.write(f"**Data columns:** {list(loaded_data.columns)}")
+                st.write(f"**Data shape:** {loaded_data.shape}")
+            elif isinstance(loaded_data, dict):
+                st.write(f"**Data keys:** {list(loaded_data.keys())}")
+            
     except Exception as e:
         st.error(f"❌ Error loading data: {e}")
         st.write("**Debug info:**")
         st.code(str(e))
         st.stop()
     
-    # Display data summary only if we have data
-    if loaded_data is not None and len(loaded_data) > 0:
+    # Display financial data plots using mlp.plot_financial_data_from_tensor
+    # This follows the exact pattern from machine_learning_main.ipynb
+    if loaded_data is not None:
+        st.subheader("📈 Financial Data Visualization")
         
-        # Reconstruct financial data from individual Series
-        financial_columns = ['Open', 'High', 'Low', 'Close', 'Volume']
-        financial_data = {}
-        date_data = None
-        
-        # Look for financial data columns and date
-        for key, data in loaded_data.items():
-            if key.lower() == 'date' or 'date' in key.lower():
-                date_data = data
-            elif any(col.lower() in key.lower() for col in financial_columns):
-                # Find which financial column this is
-                for col in financial_columns:
-                    if col.lower() in key.lower():
-                        financial_data[col] = data
-                        break
-        
-        # Create financial DataFrame if we have the components
-        financial_df = None
-        if financial_data and date_data is not None:
-            try:
-                # Convert Series to DataFrame if needed
-                df_dict = {}
-                if hasattr(date_data, 'values'):
-                    df_dict['date'] = date_data.values if hasattr(date_data, 'values') else date_data
-                else:
-                    df_dict['date'] = date_data
-                    
-                for col, data in financial_data.items():
-                    if hasattr(data, 'values'):
-                        df_dict[col] = data.values
-                    else:
-                        df_dict[col] = data
-                
-                financial_df = pd.DataFrame(df_dict)
-                st.success(f"✅ Reconstructed financial data with {len(financial_df)} rows")
-                
-            except Exception as e:
-                st.warning(f"Could not reconstruct financial DataFrame: {e}")
-                # Try alternative approach - use the raw loaded_data
-                if 'financial_data.csv' in loaded_data:
-                    financial_df = loaded_data['financial_data.csv']
-        
-        # Alternative: look for any DataFrame that might contain financial data
-        if financial_df is None:
-            for key, df in loaded_data.items():
-                if hasattr(df, 'columns') and len(df.columns) > 1:
-                    # Check if it has financial-like columns
-                    cols = [c.lower() for c in df.columns]
-                    if any(fin_col.lower() in ' '.join(cols) for fin_col in financial_columns):
-                        financial_df = df
-                        st.info(f"Using {key} as financial data source")
-                        break
-        
-        # Display metrics if we have financial data
-        if financial_df is not None and len(financial_df) > 0:
-            col1, col2, col3, col4 = st.columns(4)
+        try:
+            # Following notebook pattern: mlp.plot_financial_data_from_tensor(loaded_data, plot=True)
+            # Use our enhanced matplotlib integration
+            streamlit_show_mlp_plots(loaded_data)
             
-            try:
+        except Exception as e:
+            st.error(f"Error creating plots with mlp functions: {e}")
+            st.write(f"Error details: {str(e)}")
+            
+            # Fallback to basic information display
+            st.subheader("📋 Data Information (Fallback)")
+            if isinstance(loaded_data, dict):
+                for key, data in loaded_data.items():
+                    st.write(f"**{key}:**")
+                    if hasattr(data, 'shape'):
+                        st.write(f"  - Shape: {data.shape}")
+                    if hasattr(data, 'columns'):
+                        st.write(f"  - Columns: {list(data.columns)}")
+                    if hasattr(data, 'dtypes'):
+                        st.write(f"  - Data types: {dict(data.dtypes)}")
+            elif hasattr(loaded_data, 'shape'):
+                st.write(f"**Data shape:** {loaded_data.shape}")
+                st.write(f"**Columns:** {list(loaded_data.columns) if hasattr(loaded_data, 'columns') else 'N/A'}")
+        
+        # Display data summary
+        st.subheader("📋 Data Summary")
+        
+        if hasattr(loaded_data, 'describe'):
+            # If loaded_data is a DataFrame
+            st.write("**Statistical Summary:**")
+            st.dataframe(loaded_data.describe())
+            
+            # Show metrics if we have financial columns
+            financial_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
+            available_cols = [col for col in financial_cols if col in loaded_data.columns]
+            
+            if available_cols:
+                col1, col2, col3, col4 = st.columns(4)
+                
                 with col1:
-                    if 'Close' in financial_df.columns:
-                        current_price = financial_df['Close'].iloc[-1]
-                        st.metric("Current Price", f"${current_price:.2f}")
-                    else:
-                        st.metric("Current Price", "N/A")
-                        
+                    if 'Close' in loaded_data.columns:
+                        current_price = loaded_data['Close'].iloc[-1]
+                        st.metric("Latest Close Price", f"${current_price:.2f}")
+                
                 with col2:
-                    if 'Close' in financial_df.columns and len(financial_df) > 1:
-                        current_price = financial_df['Close'].iloc[-1]
-                        prev_price = financial_df['Close'].iloc[-2]
+                    if 'Close' in loaded_data.columns and len(loaded_data) > 1:
+                        current_price = loaded_data['Close'].iloc[-1]
+                        prev_price = loaded_data['Close'].iloc[-2]
                         price_change = current_price - prev_price
                         pct_change = (price_change / prev_price) * 100
                         st.metric("Daily Change", f"${price_change:.2f}", delta=f"{pct_change:.2f}%")
-                    else:
-                        st.metric("Daily Change", "N/A")
-                        
+                
                 with col3:
-                    if 'Volume' in financial_df.columns:
-                        volume = financial_df['Volume'].iloc[-1]
-                        st.metric("Volume", f"{volume:,.0f}")
-                    else:
-                        st.metric("Volume", "N/A")
-                        
+                    if 'Volume' in loaded_data.columns:
+                        volume = loaded_data['Volume'].iloc[-1]
+                        st.metric("Latest Volume", f"{volume:,.0f}")
+                
                 with col4:
-                    if 'Close' in financial_df.columns and len(financial_df) > 252:
-                        volatility = financial_df['Close'].pct_change().std() * np.sqrt(252) * 100
-                        st.metric("Volatility (252d)", f"{volatility:.2f}%")
-                    else:
-                        st.metric("Volatility", "N/A")
-                        
-            except Exception as e:
-                st.error(f"Error calculating metrics: {e}")
-        else:
-            st.warning("Could not find or reconstruct financial data")
-            st.write("**Available data keys:**")
-            for key in loaded_data.keys():
-                st.write(f"- {key}")
+                    if 'Close' in loaded_data.columns and len(loaded_data) > 20:
+                        volatility = loaded_data['Close'].pct_change().std() * np.sqrt(252) * 100
+                        st.metric("Annualized Volatility", f"{volatility:.2f}%")
         
-        # Financial data plot using your plotting function
-        st.subheader("Price History")
-        
-        if financial_df is not None and len(financial_df) > 0:
-            try:
-                # Use your plotting function approach but adapt for Streamlit/Plotly
-                if 'date' in financial_df.columns:
-                    # Set date as index for plotting
-                    plot_df = financial_df.copy()
-                    plot_df['date'] = pd.to_datetime(plot_df['date'])
-                    plot_df = plot_df.set_index('date')
+        elif isinstance(loaded_data, dict):
+            # If loaded_data is a dictionary of datasets
+            st.write("**Available Datasets:**")
+            for key, data in loaded_data.items():
+                if hasattr(data, 'shape'):
+                    st.write(f"- **{key}**: {data.shape[0]} rows, {data.shape[1]} columns")
                 else:
-                    plot_df = financial_df.copy()
-                
-                # Create interactive plots with Plotly
-                financial_columns_present = [col for col in ['Open', 'High', 'Low', 'Close', 'Volume'] 
-                                           if col in plot_df.columns]
-                
-                if financial_columns_present:
-                    # Candlestick chart if we have OHLC data
-                    if all(col in plot_df.columns for col in ['Open', 'High', 'Low', 'Close']):
-                        fig = go.Figure(data=go.Candlestick(
-                            x=plot_df.index,
-                            open=plot_df['Open'],
-                            high=plot_df['High'],
-                            low=plot_df['Low'],
-                            close=plot_df['Close'],
-                            name="Price"
-                        ))
-                        fig.update_layout(
-                            title=f"{selected_stock_name} Candlestick Chart",
-                            xaxis_title="Date",
-                            yaxis_title="Price ($)",
-                            height=500
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
-                    
-                    # Individual price plots
-                    if len(financial_columns_present) > 0:
-                        price_cols = [col for col in financial_columns_present if col != 'Volume']
-                        if price_cols:
-                            fig_prices = go.Figure()
-                            colors = {'Open': 'blue', 'High': 'red', 'Low': 'orange', 'Close': 'green'}
-                            
-                            for col in price_cols:
-                                fig_prices.add_trace(go.Scatter(
-                                    x=plot_df.index,
-                                    y=plot_df[col],
-                                    mode='lines',
-                                    name=col,
-                                    line=dict(color=colors.get(col, 'gray'))
-                                ))
-                            
-                            fig_prices.update_layout(
-                                title="Price Components Over Time",
-                                xaxis_title="Date",
-                                yaxis_title="Price ($)",
-                                height=400
-                            )
-                            st.plotly_chart(fig_prices, use_container_width=True)
-                    
-                    # Volume chart if available
-                    if 'Volume' in plot_df.columns:
-                        fig_volume = go.Figure()
-                        fig_volume.add_trace(go.Bar(
-                            x=plot_df.index,
-                            y=plot_df['Volume'],
-                            name='Volume',
-                            marker_color='darkblue'
-                        ))
-                        fig_volume.update_layout(
-                            title="Trading Volume",
-                            xaxis_title="Date",
-                            yaxis_title="Volume",
-                            height=300
-                        )
-                        st.plotly_chart(fig_volume, use_container_width=True)
-                else:
-                    st.warning("No recognizable financial columns found for plotting")
-                    
-            except Exception as e:
-                st.error(f"Error creating plots: {e}")
-                st.write("**Available columns:**", list(financial_df.columns) if financial_df is not None else "None")
-        else:
-            st.warning("No financial data available for plotting")
-        st.subheader("Price History")
-        if 'financial_data.csv' in loaded_data:
-            try:
-                fig = go.Figure()
-                df = loaded_data['financial_data.csv']
-                
-                # Handle date column properly
-                date_col = None
-                for col in df.columns:
-                    if 'date' in col.lower():
-                        date_col = col
-                        break
-                
-                if date_col is not None:
-                    # Convert date column back to datetime for plotting
-                    dates = pd.to_datetime(df[date_col])
-                    
-                    # Candlestick chart
-                    fig.add_trace(go.Candlestick(
-                        x=dates,
-                        open=df['Open'],
-                        high=df['High'],
-                        low=df['Low'],
-                        close=df['Close'],
-                        name=selected_stock_name
-                    ))
-                    
-                    fig.update_layout(
-                        title=f"{selected_stock_name} Price Chart",
-                        xaxis_title="Date",
-                        yaxis_title="Price ($)",
-                        height=500
-                    )
-                    
-                    st.plotly_chart(fig, use_container_width=True)
-                else:
-                    st.warning("Date column not found in financial data")
-                    
-            except Exception as e:
-                st.error(f"Error creating price chart: {e}")
-        
-        # Economic indicators
-        st.subheader("Economic Indicators")
-        econ_cols = st.columns(2)
-        
-        with econ_cols[0]:
-            if 'gdp_data.csv' in loaded_data:
-                try:
-                    gdp_df = loaded_data['gdp_data.csv']
-                    # Find date column
-                    date_col = None
-                    for col in gdp_df.columns:
-                        if 'date' in col.lower():
-                            date_col = col
-                            break
-                    
-                    if date_col is not None:
-                        gdp_dates = pd.to_datetime(gdp_df[date_col])
-                        # Find GDP column
-                        gdp_col = None
-                        for col in gdp_df.columns:
-                            if 'gdp' in col.lower():
-                                gdp_col = col
-                                break
-                        
-                        if gdp_col is not None:
-                            fig_gdp = px.line(x=gdp_dates, y=gdp_df[gdp_col], title="GDP Trends")
-                            fig_gdp.update_xaxes(title="Date")
-                            fig_gdp.update_yaxes(title="GDP")
-                            st.plotly_chart(fig_gdp, use_container_width=True)
-                        else:
-                            st.warning("GDP column not found")
-                    else:
-                        st.warning("Date column not found in GDP data")
-                except Exception as e:
-                    st.error(f"Error plotting GDP data: {e}")
-        
-        with econ_cols[1]:
-            if 'inflation_data.csv' in loaded_data:
-                try:
-                    inflation_df = loaded_data['inflation_data.csv']
-                    # Find date column
-                    date_col = None
-                    for col in inflation_df.columns:
-                        if 'date' in col.lower():
-                            date_col = col
-                            break
-                    
-                    if date_col is not None:
-                        inflation_dates = pd.to_datetime(inflation_df[date_col])
-                        # Find inflation column
-                        inflation_col = None
-                        for col in inflation_df.columns:
-                            if 'inflation' in col.lower():
-                                inflation_col = col
-                                break
-                        
-                        if inflation_col is not None:
-                            fig_inflation = px.line(x=inflation_dates, y=inflation_df[inflation_col], title="Inflation Rate")
-                            fig_inflation.update_xaxes(title="Date")
-                            fig_inflation.update_yaxes(title="Inflation Rate")
-                            st.plotly_chart(fig_inflation, use_container_width=True)
-                        else:
-                            st.warning("Inflation column not found")
-                    else:
-                        st.warning("Date column not found in inflation data")
-                except Exception as e:
-                    st.error(f"Error plotting inflation data: {e}")
+                    st.write(f"- **{key}**: {type(data)}")
+    
     else:
-        st.warning("Please load data first or check data files.")
+        st.warning("No data available for visualization. Please check data loading.")
+        
+        # Data file status check
+        with st.expander("📁 Data Files Status"):
+            data_files = [
+                './data/financial_data.csv',
+                './data/gdp_data.csv', 
+                './data/interest_rate_data.csv',
+                './data/inflation_data.csv',
+                './data/unemployment_rate_data.csv',
+                './data/SP500_sentiment_gpu_parallel_filtered.csv'
+            ]
+            
+            for file_path in data_files:
+                if os.path.exists(file_path):
+                    st.write(f"✅ {file_path}")
+                else:
+                    st.write(f"❌ {file_path}")
 
 # Tab 2: Analysis
 with tab2:
@@ -608,202 +425,144 @@ with tab3:
     st.header("📈 Correlation Analysis")
     
     if loaded_data is not None:
+        st.subheader("Financial Data Correlations")
+        st.write("Using machine_learning_plotting correlation analysis...")
+        
         try:
-            # Create a robust correlation analysis that works with our data structure
-            st.subheader("Building Correlation Matrix...")
+            # Following the pattern from machine_learning_main.ipynb:
+            # corr_matrix, found_vars, corr_df = mlp.create_half_correlation_plot3(loaded_data, plot=True, save=False)
             
-            # Collect all numeric data from all datasets
-            all_numeric_data = []
-            column_names = []
+            # Use the mlp correlation function but don't plot directly (we'll handle the plot display)
+            corr_matrix, found_vars, corr_df = mlp.create_half_correlation_plot3(loaded_data, plot=False, save=False)
             
-            for dataset_name, df in loaded_data.items():
-                # Ensure we have a DataFrame
-                if isinstance(df, pd.Series):
-                    df = df.to_frame()
-                
-                if hasattr(df, 'select_dtypes'):
-                    # Get numeric columns, excluding date-like columns
-                    numeric_cols = df.select_dtypes(include=[np.number])
-                    
-                    for col in numeric_cols.columns:
-                        # Skip columns that look like dates or indices
-                        if 'date' not in col.lower() and 'index' not in col.lower():
-                            clean_col_name = f"{dataset_name.replace('.csv', '')}_{col}"
-                            all_numeric_data.append(numeric_cols[col])
-                            column_names.append(clean_col_name)
-                            st.write(f"✅ Added {clean_col_name}")
+            st.success(f"✅ Created correlation analysis with {len(found_vars)} variables")
             
-            if len(all_numeric_data) >= 2:
-                # Combine all numeric data
-                combined_df = pd.concat(all_numeric_data, axis=1, keys=column_names)
-                
-                # Remove any rows with all NaN values
-                combined_df = combined_df.dropna(how='all')
-                
-                # Calculate correlation matrix
-                corr_matrix = combined_df.corr()
-                
-                st.success(f"Created correlation matrix with {len(column_names)} variables")
-                
-                # Interactive correlation heatmap
+            # Display the variables that were found and used
+            with st.expander("📋 Variables Used in Correlation Analysis"):
+                for var in found_vars:
+                    st.write(f"- {var}")
+            
+            # Display correlation matrix as interactive heatmap
+            if corr_matrix is not None and not corr_matrix.empty:
                 fig_corr = px.imshow(
                     corr_matrix,
                     labels=dict(x="Variables", y="Variables", color="Correlation"),
                     color_continuous_scale="RdBu_r",
-                    title=f"Feature Correlation Matrix ({len(column_names)} variables)",
+                    title=f"Financial Data Correlation Matrix ({len(found_vars)} variables)",
                     aspect="auto"
                 )
                 fig_corr.update_layout(
-                    height=max(600, len(column_names) * 30),
+                    height=max(600, len(found_vars) * 30),
                     xaxis={'side': 'bottom'},
                     font=dict(size=10)
                 )
                 st.plotly_chart(fig_corr, use_container_width=True)
+            
+            # Display correlation results table
+            if corr_df is not None and not corr_df.empty:
+                st.subheader("📊 Correlation Results")
+                st.dataframe(
+                    corr_df.style.format({'Correlation': '{:.3f}'}),
+                    use_container_width=True
+                )
                 
-                # Top correlations (excluding self-correlations)
-                st.subheader("Strongest Correlations")
-                
-                # Create correlation pairs
-                corr_pairs = []
-                for i in range(len(corr_matrix.columns)):
-                    for j in range(i+1, len(corr_matrix.columns)):
-                        var1 = corr_matrix.columns[i]
-                        var2 = corr_matrix.columns[j]
-                        corr_value = corr_matrix.iloc[i, j]
-                        
-                        if not pd.isna(corr_value):
-                            corr_pairs.append({
-                                'Variable 1': var1,
-                                'Variable 2': var2,
-                                'Correlation': corr_value,
-                                'Abs Correlation': abs(corr_value)
-                            })
-                
-                if corr_pairs:
-                    corr_df = pd.DataFrame(corr_pairs)
-                    corr_df = corr_df.sort_values('Abs Correlation', ascending=False)
+                # Top correlations visualization
+                if len(corr_df) > 0:
+                    st.subheader("🔝 Strongest Correlations")
+                    top_n = min(10, len(corr_df))
+                    top_corr = corr_df.head(top_n)
                     
-                    # Display top 15 correlations
-                    top_corr = corr_df.head(15)
-                    
-                    # Format the correlation values for better display
-                    display_df = top_corr.copy()
-                    display_df['Correlation'] = display_df['Correlation'].round(3)
-                    display_df = display_df.drop('Abs Correlation', axis=1)
-                    
-                    st.dataframe(display_df, use_container_width=True)
-                    
-                    # Create a bar chart of top correlations
                     fig_bar = px.bar(
-                        top_corr.head(10),
-                        x='Abs Correlation',
-                        y=[f"{row['Variable 1']} vs {row['Variable 2']}" for _, row in top_corr.head(10).iterrows()],
+                        top_corr,
+                        x='Correlation',
+                        y=top_corr.index,
                         orientation='h',
-                        title="Top 10 Strongest Correlations (by absolute value)",
-                        color='Correlation',
-                        color_continuous_scale="RdBu_r"
+                        title=f"Top {top_n} Strongest Correlations",
+                        labels={'y': 'Variable Pairs', 'Correlation': 'Correlation Coefficient'}
                     )
-                    fig_bar.update_layout(height=500)
+                    fig_bar.update_layout(height=400)
                     st.plotly_chart(fig_bar, use_container_width=True)
-                else:
-                    st.warning("No valid correlations found")
-                    
-            else:
-                st.warning(f"Need at least 2 numeric variables for correlation analysis. Found: {len(all_numeric_data)}")
-                
-                # Show what we found
-                if column_names:
-                    st.write("Available numeric columns:")
-                    for name in column_names:
-                        st.write(f"- {name}")
-                        
+            
         except Exception as e:
             st.error(f"Error in correlation analysis: {e}")
+            st.write("**Error details:**")
+            st.code(str(e))
             
-            # Enhanced debug information
-            with st.expander("🔧 Debug Information"):
-                st.write("**Error Details:**")
-                st.code(str(e))
-                
-                st.write("**Data Structure:**")
-                for key, df in loaded_data.items():
-                    st.write(f"- {key}: {type(df)} - {df.shape if hasattr(df, 'shape') else 'No shape'}")
-                    if hasattr(df, 'columns'):
-                        st.write(f"  Columns: {list(df.columns)}")
-                
-            # Try alternative method using the original function if available
+            # Fallback: Basic correlation analysis
+            st.subheader("Fallback Correlation Analysis")
             try:
-                st.subheader("Attempting Alternative Correlation Method...")
-                
-                # Convert the data structure to what the original function expects
-                clean_loaded_data = {}
-                for key, df in loaded_data.items():
-                    if isinstance(df, pd.Series):
-                        df = df.to_frame()
-                    clean_loaded_data[key] = df
-                
-                # Try the original function with cleaned data
-                corr_matrix, found_vars, corr_df = mlp.create_half_correlation_plot3(
-                    clean_loaded_data, plot=False, save=False
-                )
-                
-                st.success("Alternative method worked!")
-                
-                # Display the results
-                fig_alt = px.imshow(
-                    corr_matrix,
-                    labels=dict(x="Variables", y="Variables", color="Correlation"),
-                    x=found_vars,
-                    y=found_vars,
-                    color_continuous_scale="RdBu_r",
-                    title="Alternative Correlation Matrix"
-                )
-                st.plotly_chart(fig_alt, use_container_width=True)
-                
-            except Exception as alt_error:
-                st.warning(f"Alternative method also failed: {alt_error}")
+                # Simple correlation for debugging
+                if hasattr(loaded_data, 'corr'):
+                    # If loaded_data is a DataFrame
+                    corr_matrix = loaded_data.corr()
+                    fig_corr = px.imshow(
+                        corr_matrix,
+                        title="Basic Correlation Matrix",
+                        color_continuous_scale="RdBu_r"
+                    )
+                    st.plotly_chart(fig_corr, use_container_width=True)
+                else:
+                    st.write("Cannot perform fallback correlation - data structure not supported")
+            except Exception as fallback_error:
+                st.error(f"Fallback correlation also failed: {fallback_error}")
     
     else:
-        st.warning("No data available for correlation analysis. Please load data first.")
+        st.warning("No data available for correlation analysis")
 
 # Tab 4: Predictions
 with tab4:
-    st.header("🤖 Model Predictions")
+    st.header("🤖 LSTM-RNN Predictions")
     
-    # Model parameters
+    # Following the exact pattern from machine_learning_main.ipynb
     st.subheader("Model Configuration")
+    
+    # Model parameters based on the notebook defaults
     pred_col1, pred_col2, pred_col3 = st.columns(3)
     
     with pred_col1:
-        sequence_length = st.slider("Sequence Length", 5, 30, 15)
-        epochs = st.slider("Epochs", 10, 100, 20)
+        sequence_length = st.slider("Sequence Length", 5, 30, 15, help="Number of time steps to look back")
+        epochs = st.slider("Epochs", 10, 100, 20, help="Number of training epochs")
     
     with pred_col2:
-        hidden_dim = st.slider("Hidden Dimension", 32, 256, 128)
-        num_layers = st.slider("Number of Layers", 1, 5, 3)
+        hidden_dim = st.slider("Hidden Dimension", 32, 256, 128, help="LSTM hidden layer size")
+        num_layers = st.slider("Number of Layers", 1, 5, 3, help="Number of LSTM layers")
     
     with pred_col3:
-        batch_size = st.slider("Batch Size", 16, 128, 32)
-        mc_samples = st.slider("MC Samples", 10, 100, 30)
+        batch_size = st.slider("Batch Size", 16, 128, 32, help="Training batch size")
+        mc_samples = st.slider("MC Samples", 10, 100, 30, help="Monte Carlo samples for uncertainty")
+    
+    # Target variable selection
+    target_variable = st.selectbox("Target Variable", ['Open', 'Close', 'High', 'Low'], index=0)
+    use_features = st.checkbox("Use Additional Features", value=True, help="Include economic indicators and sentiment")
     
     # Prediction button
-    if st.button("🚀 Run Prediction"):
+    if st.button("🚀 Run LSTM Prediction", type="primary"):
         if tensor_data is not None:
-            with st.spinner("Training model and generating predictions..."):
+            with st.spinner("Training LSTM model and generating predictions..."):
                 try:
+                    # Following exact pattern from notebook:
+                    # dates, predictions, actuals, std_devs = mlt.parallelized_rolling_window_prediction_for_financial_data2(...)
+                    
+                    st.info("Training LSTM model with Monte Carlo dropout for uncertainty estimation...")
+                    
                     dates, predictions, actuals, std_devs = mlt.parallelized_rolling_window_prediction_for_financial_data2(
                         tensor_data,
-                        target_variable='Open',
+                        target_variable=target_variable,
                         sequence_length=sequence_length,
                         epochs=epochs,
                         hidden_dim=hidden_dim,
                         num_layers=num_layers,
                         batch_size=batch_size,
                         mc_samples=mc_samples,
-                        use_features=True
+                        use_features=use_features
                     )
                     
-                    # Plot predictions
+                    st.success(f"✅ Model training completed! Generated {len(predictions)} predictions.")
+                    
+                    # Display prediction results
+                    st.subheader("📈 Prediction Results")
+                    
+                    # Plot predictions with uncertainty
                     fig_pred = go.Figure()
                     
                     # Actual values
@@ -812,7 +571,7 @@ with tab4:
                         y=actuals,
                         mode='lines',
                         name='Actual',
-                        line=dict(color='blue')
+                        line=dict(color='blue', width=2)
                     ))
                     
                     # Predictions
@@ -821,40 +580,98 @@ with tab4:
                         y=predictions,
                         mode='lines',
                         name='Predicted',
-                        line=dict(color='red')
+                        line=dict(color='red', width=2)
                     ))
                     
-                    # Uncertainty bands
-                    upper_bound = predictions + std_devs
-                    lower_bound = predictions - std_devs
-                    
-                    fig_pred.add_trace(go.Scatter(
-                        x=dates,
-                        y=upper_bound,
-                        fill=None,
-                        mode='lines',
-                        line_color='rgba(0,0,0,0)',
-                        showlegend=False
-                    ))
-                    
-                    fig_pred.add_trace(go.Scatter(
-                        x=dates,
-                        y=lower_bound,
-                        fill='tonexty',
-                        mode='lines',
-                        line_color='rgba(0,0,0,0)',
-                        name='Uncertainty',
-                        fillcolor='rgba(255,0,0,0.2)'
-                    ))
+                    # Uncertainty bands (confidence intervals)
+                    if std_devs is not None and len(std_devs) > 0:
+                        upper_bound = predictions + 2 * std_devs  # 95% confidence interval
+                        lower_bound = predictions - 2 * std_devs
+                        
+                        fig_pred.add_trace(go.Scatter(
+                            x=dates,
+                            y=upper_bound,
+                            fill=None,
+                            mode='lines',
+                            line_color='rgba(0,0,0,0)',
+                            showlegend=False
+                        ))
+                        
+                        fig_pred.add_trace(go.Scatter(
+                            x=dates,
+                            y=lower_bound,
+                            fill='tonexty',
+                            mode='lines',
+                            line_color='rgba(0,0,0,0)',
+                            name='95% Confidence Interval',
+                            fillcolor='rgba(255,0,0,0.2)'
+                        ))
                     
                     fig_pred.update_layout(
-                        title="Stock Price Predictions with Uncertainty",
+                        title=f"LSTM Stock Price Predictions - {target_variable}",
                         xaxis_title="Date",
-                        yaxis_title="Price",
-                        height=600
+                        yaxis_title=f"Price ({target_variable})",
+                        height=600,
+                        showlegend=True
                     )
                     
                     st.plotly_chart(fig_pred, use_container_width=True)
+                    
+                    # Performance metrics
+                    st.subheader("📊 Model Performance")
+                    
+                    # Calculate metrics
+                    from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
+                    
+                    mse = mean_squared_error(actuals, predictions)
+                    mae = mean_absolute_error(actuals, predictions)
+                    r2 = r2_score(actuals, predictions)
+                    rmse = np.sqrt(mse)
+                    
+                    # Display metrics
+                    metric_col1, metric_col2, metric_col3, metric_col4 = st.columns(4)
+                    
+                    with metric_col1:
+                        st.metric("RMSE", f"{rmse:.3f}")
+                    with metric_col2:
+                        st.metric("MAE", f"{mae:.3f}")
+                    with metric_col3:
+                        st.metric("R²", f"{r2:.3f}")
+                    with metric_col4:
+                        mean_uncertainty = np.mean(std_devs) if std_devs is not None else 0
+                        st.metric("Avg Uncertainty", f"{mean_uncertainty:.3f}")
+                    
+                    # Prediction vs Actual scatter plot
+                    st.subheader("📊 Prediction vs Actual")
+                    
+                    fig_scatter = go.Figure()
+                    fig_scatter.add_trace(go.Scatter(
+                        x=actuals,
+                        y=predictions,
+                        mode='markers',
+                        name='Predictions',
+                        marker=dict(color='red', size=6, opacity=0.6)
+                    ))
+                    
+                    # Perfect prediction line
+                    min_val = min(min(actuals), min(predictions))
+                    max_val = max(max(actuals), max(predictions))
+                    fig_scatter.add_trace(go.Scatter(
+                        x=[min_val, max_val],
+                        y=[min_val, max_val],
+                        mode='lines',
+                        name='Perfect Prediction',
+                        line=dict(color='black', dash='dash')
+                    ))
+                    
+                    fig_scatter.update_layout(
+                        title="Predicted vs Actual Values",
+                        xaxis_title="Actual Values",
+                        yaxis_title="Predicted Values",
+                        height=500
+                    )
+                    
+                    st.plotly_chart(fig_scatter, use_container_width=True)
                     
                     # Performance metrics
                     mse = np.mean((predictions - actuals) ** 2)
