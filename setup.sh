@@ -57,6 +57,7 @@ if [[ $use_conda != true ]]; then
     
     echo "📥 Installing Python packages..."
     pip install -r requirements.txt
+    pip install -r requirements_dashboard.txt
 fi
 
 # Download data
