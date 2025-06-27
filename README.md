@@ -81,24 +81,24 @@ A comprehensive stock prediction system using machine learning techniques, senti
 machine_learning_stock_prediction/
 ├── 📊 streamlit_dashboard.py          # Main dashboard application
 ├── 📋 requirements_dashboard.txt      # Python dependencies
-├── 🐳 Dockerfile                     # Container deployment
-├── 🔧 finance_env_packages.yaml      # Conda environment
-├── 📖 README.md                      # This file
-├── 📖 DASHBOARD_README.md            # Detailed dashboard docs
-├── 🚀 run_dashboard.sh              # Quick launcher script
-├── ⚙️ dashboard_config.ini          # Configuration settings
-├── 🧪 test_dashboard.py             # Dashboard validation
-├── 📁 src/                          # Source code
-│   ├── 🤖 machine_learning_*.py     # ML modules
+├── 🐳 Dockerfile                      # Container deployment
+├── 🔧 finance_env_packages.yaml       # Conda environment
+├── 📖 README.md                       # This file
+├── 📖 DASHBOARD_README.md             # Detailed dashboard docs
+├── 🚀 run_dashboard.sh                # Quick launcher script
+├── ⚙️ dashboard_config.ini            # Configuration settings
+├── 🧪 test_dashboard.py               # Dashboard validation
+├── 📁 src/                            # Source code
+│   ├── 🤖 machine_learning_*.py       # ML modules
 │   ├── 📰 machine_learning_BERT_articles.py  # Sentiment analysis
 │   ├── 📊 machine_learning_plotting.py       # Visualization
-│   ├── 🏗️ create_tensor.py          # Data preprocessing
-│   └── 📥 polybox_download.py       # Data downloader
-├── 📁 data/                         # Data files (auto-generated)
-│   ├── 📈 financial_data.csv        # Stock prices
-│   ├── 🏛️ economic indicators.csv   # GDP, inflation, etc.
-│   └── 📰 sentiment_*.csv           # News sentiment scores
-└── 📁 __pycache__/                  # Python cache (auto-generated)
+│   ├── 🏗️ create_tensor.py            # Data preprocessing
+│   └── 📥 polybox_download.py         # Data downloader
+├── 📁 data/                           # Data files (auto-generated)
+│   ├── 📈 financial_data.csv          # Stock prices
+│   ├── 🏛️ economic indicators.csv     # GDP, inflation, etc.
+│   └── 📰 sentiment_*.csv             # News sentiment scores
+└── 📁 __pycache__/                    # Python cache (auto-generated)
 ```
 
 ## 🎛️ Dashboard Usage
