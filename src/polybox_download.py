@@ -7,13 +7,13 @@ from pathlib import Path
 
 def download_and_extract_polybox_data(url='https://polybox.ethz.ch/index.php/s/R99PSQwT9e9CjYy/download'):
     """
-    Downloads a zip file from Polybox and extracts all files directly to the src/data directory.
+    Downloads a zip file from Polybox and extracts all files directly to the 'data' directory.
     
     Args:
         url (str): URL to the zip file
     """
     # Define the data directory path
-    data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'src/data')
+    data_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
     
     # Create data directory if it doesn't exist
     os.makedirs(data_dir, exist_ok=True)
