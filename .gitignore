@@ -72,9 +72,9 @@ models/
 *.pth
 
 # Images (comment out if you want to include generated plots)
-# *.png
-# *.jpg
-# *.jpeg
+*.png
+*.jpg
+*.jpeg
 
 # Streamlit cache
 .streamlit/
