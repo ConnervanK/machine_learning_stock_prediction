@@ -513,7 +513,7 @@ def create_specific_correlation_plot(loaded_data):
         
     return corr_matrix, found_vars, corr_df
 
-def create_half_correlation_plot(temporal_data, figsize=(14, 12), plot=True, save=True, save_path="financial_correlation_analysis.png"):
+def create_half_correlation_plot(temporal_data, figsize=(14, 12), plot=True, save=True, save_path="images/financial_correlation_analysis.png"):
     """
     Create an enhanced half correlation plot showing stock closing prices and volumes
     with options to control plotting and saving behavior.
@@ -523,7 +523,7 @@ def create_half_correlation_plot(temporal_data, figsize=(14, 12), plot=True, sav
         figsize: Figure size tuple (width, height)
         plot: Whether to display the plot (default: True)
         save: Whether to save the plot to a file (default: True)
-        save_path: Path where to save the plot (default: "financial_correlation_analysis.png")
+        save_path: Path where to save the plot (default: "images/financial_correlation_analysis.png")
         
     Returns:
         corr_matrix: Correlation matrix
@@ -863,7 +863,7 @@ def plot_financial_data_from_tensor(merged_df, plot=True):
             # Adjust layout and save
             plt.tight_layout()
             plt.subplots_adjust(top=0.92)
-            plt.savefig("financial_market_data.png", dpi=300, bbox_inches='tight')
+            plt.savefig("images/financial_market_data.png", dpi=300, bbox_inches='tight')
             plt.show()
     
     # Plot financial indicators - each in its own subplot
@@ -949,13 +949,13 @@ def plot_financial_data_from_tensor(merged_df, plot=True):
         plt.subplots_adjust(hspace=0.5)
         
         plt.tight_layout()
-        plt.savefig("economic_indicators.png", dpi=300, bbox_inches='tight')
+        plt.savefig("images/economic_indicators.png", dpi=300, bbox_inches='tight')
         plt.show()
     
     print("Financial data plots generated successfully")
 
 
-def create_half_correlation_plot3(loaded_data, figsize=(14, 12), plot=True, save=False, save_path="financial_correlation_analysis.png"):
+def create_half_correlation_plot3(loaded_data, figsize=(14, 12), plot=True, save=False, save_path="images/financial_correlation_analysis.png"):
     """
     Create a focused half correlation plot using only Volume, Close price, and economic indicators,
     without including date columns in the correlation calculation.
@@ -966,7 +966,7 @@ def create_half_correlation_plot3(loaded_data, figsize=(14, 12), plot=True, save
         figsize: Figure size tuple (width, height)
         plot: Whether to display the plot (default: True)
         save: Whether to save the plot to a file (default: False)
-        save_path: Path where to save the plot (default: "financial_correlation_analysis.png")
+        save_path: Path where to save the plot (default: "images/financial_correlation_analysis.png")
         
     Returns:
         corr_matrix: Correlation matrix
