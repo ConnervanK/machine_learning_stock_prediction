@@ -1,6 +1,6 @@
 # 🚀 Machine Learning Stock Prediction
 
-A comprehensive stock prediction system using machine learning techniques, sentiment analysis, and economic indicators with an interactive Streamlit dashboard.
+A comprehensive stock prediction system using machine learning techniques, sentiment analysis, and economic indicators with an interactive Streamlit dashboard. 
 
 ![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)
 ![Streamlit](https://img.shields.io/badge/Streamlit-Dashboard-red.svg)
